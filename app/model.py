@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import efficientnet_b3
 
+from .cam_methods import generate_all_cams
 from .gradcam import GradCAM
 from .utils import (
     generate_heatmap,
@@ -149,3 +150,27 @@ class BoneFracturePredictor:
             overlay_image=np_to_pil(overlay),
             prediction_time_ms=elapsed_ms,
         )
+
+    @torch.inference_mode(False)
+    def predict_with_all_cams(self, pil_image):
+        import time
+
+        start = time.perf_counter()
+        cam_bundle = generate_all_cams(
+            model=self.model,
+            image=pil_image,
+            target_layer=self.target_layer,
+            image_size=self.image_size,
+            device=self.device,
+        )
+
+        pred_idx = int(cam_bundle["predicted_index"])
+        confidence = float(cam_bundle["confidence"])
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+
+        return {
+            "label": self.class_names[pred_idx],
+            "confidence": confidence,
+            "prediction_time_ms": elapsed_ms,
+            "cams": cam_bundle["cams"],
+        }
